@@ -1,0 +1,283 @@
+openapi: 3.0.3
+info:
+  title: FastBite External Integrations API
+  version: 1.0.0
+  description: Спецификация API для взаимодействия системы FastBite с внешними REST-сервисами: платежи, уведомления, геосервисы, мониторинг, CRM, бухгалтерия и аудит.
+servers:
+  - url: https://api.fastbite.com
+    description: Production API server
+
+paths:
+  /external/payment:
+    post:
+      summary: Инициировать платёж
+      description: Инициирует процесс оплаты заказа через внешний платёжный сервис.
+      parameters:
+        - in: header
+          name: X-API-Key
+          required: true
+          description: Уникальный API-ключ, выданный для доступа к внешнему платежному API.
+          schema:
+            type: string
+      requestBody:
+        description: Информация о платеже, включая заказ, сумму, валюту и метод оплаты.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                  description: Уникальный идентификатор заказа.
+                amount:
+                  type: number
+                  format: float
+                  description: Сумма к оплате.
+                currency:
+                  type: string
+                  description: Валюта платежа (например, "RUB", "USD").
+                paymentMethod:
+                  type: string
+                  description: Выбранный метод оплаты (например, "card", "sbp", "applepay").
+                returnUrl:
+                  type: string
+                  description: URL для возврата пользователя после оплаты.
+              required: [orderId, amount, currency, paymentMethod, returnUrl]
+      responses:
+        '200':
+          description: Платёж успешно инициирован.
+        '400':
+          description: Ошибка валидации данных.
+        '403':
+          description: Недопустимый или отсутствующий API-ключ.
+
+  /external/notify:
+    post:
+      summary: Отправить уведомление
+      description: Передаёт запрос на отправку уведомления пользователю через внешний notification-сервис (SMS, Email, Push).
+      parameters:
+        - in: header
+          name: X-API-Key
+          required: true
+          description: Ключ авторизации FastBite для доступа к notification-сервису.
+          schema:
+            type: string
+      requestBody:
+        description: Данные уведомления, включая канал, сообщение и получателя.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                  description: ID пользователя, которому направляется сообщение.
+                channel:
+                  type: string
+                  enum: [sms, email, push]
+                  description: Канал доставки уведомления.
+                message:
+                  type: string
+                  description: Содержание сообщения.
+              required: [userId, channel, message]
+      responses:
+        '202':
+          description: Уведомление принято в очередь на отправку.
+        '400':
+          description: Ошибка в структуре запроса.
+
+  /external/geo/courier-location:
+    get:
+      summary: Получение текущих координат курьера
+      description: Возвращает актуальные координаты курьера по его идентификатору, полученные от внешнего геосервиса.
+      parameters:
+        - in: header
+          name: X-API-Key
+          required: true
+          description: Ключ API FastBite для доступа к геосервису.
+          schema:
+            type: string
+        - in: query
+          name: courierId
+          required: true
+          description: Уникальный идентификатор курьера.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Координаты курьера успешно получены.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  courierId:
+                    type: string
+                    description: Идентификатор курьера.
+                  lat:
+                    type: number
+                    description: Текущая широта.
+                  lon:
+                    type: number
+                    description: Текущая долгота.
+                  timestamp:
+                    type: string
+                    description: Время последнего обновления координат (ISO 8601).
+        '404':
+          description: Курьер не найден.
+        '400':
+          description: Неверный параметр запроса.
+
+  /external/monitoring/prometheus:
+    post:
+      summary: Отправка метрик Prometheus
+      description: Отправляет метрики во внешний мониторинг (например, Prometheus Push Gateway) для анализа состояния микросервисов FastBite.
+      parameters:
+        - in: header
+          name: X-API-Key
+          required: true
+          description: API-ключ для аутентификации источника метрик.
+          schema:
+            type: string
+      requestBody:
+        description: Сырые метрики в формате Prometheus exposition (text/plain)
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        '202':
+          description: Метрики приняты в обработку.
+        '400':
+          description: Неверный формат метрик.
+        '403':
+          description: Ошибка авторизации.
+        '500':
+          description: Внутренняя ошибка мониторинга.
+
+  /external/crm/sync:
+    post:
+      summary: Синхронизация данных с CRM
+      description: Отправляет информацию о пользователе во внешнюю CRM-систему для анализа и маркетинга.
+      parameters:
+        - in: header
+          name: X-API-Key
+          required: true
+          description: Ключ API, необходимый для доступа к CRM.
+          schema:
+            type: string
+      requestBody:
+        description: Основная информация о пользователе.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                  description: Уникальный идентификатор пользователя.
+                name:
+                  type: string
+                  description: Имя пользователя.
+                phone:
+                  type: string
+                  description: Номер телефона.
+                email:
+                  type: string
+                  description: Электронная почта.
+              required: [userId, name]
+      responses:
+        '200':
+          description: Данные успешно синхронизированы.
+        '400':
+          description: Ошибка валидации данных.
+
+  /external/accounting/report:
+    get:
+      summary: Получение отчета о заказах
+      description: Предоставляет внешней бухгалтерской системе доступ к агрегированным данным по заказам за указанный период (pull-модель).
+      parameters:
+        - in: header
+          name: X-API-Key
+          required: true
+          description: API-ключ для доступа к отчету.
+          schema:
+            type: string
+        - in: query
+          name: period
+          required: true
+          description: Период отчета в формате YYYY-MM
+          schema:
+            type: string
+        - in: query
+          name: format
+          required: false
+          description: Формат отчета (по умолчанию JSON). Возможные значения: json, csv
+          schema:
+            type: string
+            enum: [json, csv]
+      responses:
+        '200':
+          description: Отчет успешно сформирован.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: string
+                    description: Период отчета
+                  totalOrders:
+                    type: integer
+                    description: Количество заказов
+                  totalRevenue:
+                    type: number
+                    description: Общая сумма выручки
+        '400':
+          description: Неверные параметры запроса
+        '403':
+          description: Ошибка авторизации
+
+  /external/security/audit:
+    post:
+      summary: Отправка события аудита
+      description: Фиксирует важное действие в системе и передаёт его в систему информационной безопасности (SIEM).
+      parameters:
+        - in: header
+          name: X-API-Key
+          required: true
+          description: Ключ API для отправки событий аудита.
+          schema:
+            type: string
+      requestBody:
+        description: Подробности события, подлежащего аудиту.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                timestamp:
+                  type: string
+                  description: Время события в формате ISO 8601.
+                action:
+                  type: string
+                  description: Название действия (например, login, deleteOrder).
+                userId:
+                  type: string
+                  description: Идентификатор пользователя, вызвавшего действие.
+                details:
+                  type: string
+                  description: Дополнительная информация.
+              required: [timestamp, action]
+      responses:
+        '204':
+          description: Событие принято без возврата содержимого.
+        '400':
+          description: Ошибка в формате события.
+
+
